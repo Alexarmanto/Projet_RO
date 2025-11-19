@@ -1,136 +1,121 @@
-// Fichier: main.c
-// "Chef d'orchestre" qui teste les Etapes 1, 2 et 3
+/**
+ * @file main.c
+ * @brief Programme principal.
+ * Permet de tester indépendamment les étapes 1 (Lecture), 2 (Solutions Initiales) et 3 (Optimisation).
+ */
 
-#include "projet_ro.h" // On inclut notre "sommaire"
 #include <stdio.h>
+#include <stdlib.h>
+#include "projet_ro.h"
 
-// -----------------------------------------------------------------
-// FONCTION DE TEST POUR L'ETAPE 1
-// -----------------------------------------------------------------
+// ==========================================================
+// FONCTION DE TEST - ETAPE 1 (Lecture & Affichage)
+// ==========================================================
 void testerEtape1(const char* nomFichier) {
-    printf("==================================================\n");
-    printf("--- TEST DE L'ETAPE 1 (LECTURE/AFFICHAGE) ---\n");
-    printf("Fichier: %s\n", nomFichier);
-    printf("==================================================\n");
+    printf("\n**************************************************\n");
+    printf("*** TEST ETAPE 1 : LECTURE DONNEES         ***\n");
+    printf("**************************************************\n");
+    printf("Fichier : %s\n", nomFichier);
 
     // 1. Lecture
     ProblemeTransport* p = lireDonnees(nomFichier);
+    if (p == NULL) return;
 
-    // 2. Affichage
+    // 2. Affichage des structures
     afficherTableauCouts(p);
-    afficherTableauSolution(p); // Affiche la solution (initialisee a 0)
 
-    // 3. Liberation
+    printf("Note : La solution (B) est initialisee a 0 par defaut.\n");
+    afficherTableauSolution(p);
+
+    // 3. Nettoyage
     libererProbleme(p);
-
-    printf("--- FIN TEST ETAPE 1 ---\n\n");
+    printf("--> Fin du Test Etape 1 (Memoire liberee).\n\n");
 }
 
-
-// -----------------------------------------------------------------
-// FONCTION DE TEST POUR L'ETAPE 2
-// -----------------------------------------------------------------
+// ==========================================================
+// FONCTION DE TEST - ETAPE 2 (Comparaison Algorithmes)
+// ==========================================================
 void testerEtape2(const char* nomFichier) {
-    printf("==================================================\n");
-    printf("--- TEST DE L'ETAPE 2 (SOLUTIONS INITIALES) ---\n");
-    printf("Fichier: %s\n", nomFichier);
-    printf("==================================================\n");
+    printf("\n**************************************************\n");
+    printf("*** TEST ETAPE 2 : SOLUTIONS INITIALES     ***\n");
+    printf("**************************************************\n");
 
-    // 1. Lecture
     ProblemeTransport* p = lireDonnees(nomFichier);
+    if (p == NULL) return;
+
     afficherTableauCouts(p);
 
-    double cout_no, cout_bh;
+    // --- Test 1 : Nord-Ouest ---
+    printf("\n[1] Execution algorithme COIN NORD-OUEST...\n");
+    algoNordOuest(p);
+    afficherTableauSolution(p);
+    double cout_no = calculerCoutTotal(p);
 
-    // --- Test Nord-Ouest ---
-    printf("\n==================================================\n");
-    printf("ALGORITHME: Coin Nord-Ouest\n");
-    printf("==================================================\n");
-
-    algoNordOuest(p); // Calcule B
-    afficherTableauSolution(p); // Affiche B
-
-    cout_no = calculerCoutTotal(p);
-    printf(">>> Cout total (Nord-Ouest): %.2f\n\n", cout_no);
-
-
-    // --- Test Balas-Hammer ---
-    printf("\n==================================================\n");
-    printf("ALGORITHME: Balas-Hammer (Vogel)\n");
-    printf("==================================================\n");
-
-    algoBalasHammer(p); // Calcule B (en ecrasant la solution N-O)
-    afficherTableauSolution(p); // Affiche B
-
-    cout_bh = calculerCoutTotal(p);
-    printf(">>> Cout total (Balas-Hammer): %.2f\n\n", cout_bh);
-
-
-    // --- Comparaison Finale Etape 2 ---
-    printf("\n==================================================\n");
-    printf("COMPARAISON DES COUTS INITIAUX pour: %s\n", nomFichier);
-    printf("==================================================\n");
-    printf("* Nord-Ouest   : %.2f\n", cout_no);
-    printf("* Balas-Hammer : %.2f\n", cout_bh);
-    printf("==================================================\n\n");
-
-
-    // 4. Liberation de la memoire
-    libererProbleme(p);
-
-    printf("--- FIN TEST ETAPE 2 ---\n\n");
-}
-
-// -----------------------------------------------------------------
-// FONCTION DE TEST POUR L'ETAPE 3 (NOUVEAU)
-// -----------------------------------------------------------------
-void testerEtape3(const char* nomFichier) {
-    printf("==================================================\n");
-    printf("--- TEST DE L'ETAPE 3 (OPTIMISATION MARCHE-PIED) ---\n");
-    printf("Fichier: %s\n", nomFichier);
-    printf("==================================================\n");
-
-    // 1. Lecture
-    ProblemeTransport* p = lireDonnees(nomFichier);
-    afficherTableauCouts(p);
-
-    // 2. Calculer la meilleure solution initiale (Balas-Hammer)
-    // C'est la solution de depart pour l'optimisation
-    printf("\n==================================================\n");
-    printf("Solution de depart (Balas-Hammer)\n");
-    printf("==================================================\n");
-
+    // --- Test 2 : Balas-Hammer ---
+    printf("\n[2] Execution algorithme BALAS-HAMMER (Vogel)...\n");
     algoBalasHammer(p);
     afficherTableauSolution(p);
-    double cout_initial = calculerCoutTotal(p);
-    printf(">>> Cout total initial (Balas-Hammer): %.2f\n\n", cout_initial);
+    double cout_bh = calculerCoutTotal(p);
 
-    // 3. Lancer l'optimisation (Marche-Pied)
-    printf("\n==================================================\n");
-    printf("LANCEMENT DE L'OPTIMISATION (MARCHE-PIED)\n");
-    printf("==================================================\n");
+    // --- Bilan ---
+    printf("\n--------------------------------------------------\n");
+    printf(" BILAN COMPARATIF (%s)\n", nomFichier);
+    printf("--------------------------------------------------\n");
+    printf(" -> Cout Nord-Ouest   : %10.2f\n", cout_no);
+    printf(" -> Cout Balas-Hammer : %10.2f\n", cout_bh);
 
-    algoMarchePied(p); // <-- APPEL DE L'ETAPE 3
+    if (cout_bh < cout_no) {
+        printf("\n => Balas-Hammer est meilleur (Gain: %.2f)\n", cout_no - cout_bh);
+    } else if (cout_no < cout_bh) {
+        printf("\n => Nord-Ouest est meilleur (Gain: %.2f)\n", cout_bh - cout_no);
+    } else {
+        printf("\n => Les deux methodes donnent le meme resultat.\n");
+    }
 
-    // 4. Afficher le resultat final
-    printf("\n==================================================\n");
-    printf("RESULTAT FINAL (OPTIMISE)\n");
-    printf("==================================================\n");
-    double cout_final = calculerCoutTotal(p);
-    afficherTableauSolution(p);
-    printf(">>> Cout initial (Balas-Hammer): %.2f\n", cout_initial);
-    printf(">>> Cout total OPTIMAL: %.2f\n\n", cout_final);
-
-    // 5. Liberation de la memoire
     libererProbleme(p);
-
-    printf("--- FIN TEST ETAPE 3 ---\n\n");
+    printf("\n--> Fin du Test Etape 2.\n\n");
 }
 
+// ==========================================================
+// FONCTION DE TEST - ETAPE 3 (Optimisation Complète)
+// ==========================================================
+void testerEtape3(const char* nomFichier) {
+    printf("\n**************************************************\n");
+    printf("*** TEST ETAPE 3 : OPTIMISATION MARCHE-PIED  ***\n");
+    printf("**************************************************\n");
 
-// -----------------------------------------------------------------
-// LE SEUL ET UNIQUE "VRAI" MAIN
-// -----------------------------------------------------------------
+    ProblemeTransport* p = lireDonnees(nomFichier);
+    if (p == NULL) return;
+
+    // 1. Solution de départ
+    printf("\n--- PHASE A : Solution Initiale (Balas-Hammer) ---\n");
+    algoBalasHammer(p);
+    double cout_init = calculerCoutTotal(p);
+    afficherTableauSolution(p);
+    printf(">>> Cout de depart : %.2f\n", cout_init);
+
+    // 2. Optimisation
+    printf("\n--- PHASE B : Lancement du Marche-Pied ---\n");
+    algoMarchePied(p);
+
+    // 3. Résultats
+    double cout_final = calculerCoutTotal(p);
+
+    printf("\n--------------------------------------------------\n");
+    printf(" RESULTAT FINAL OPTIMISE\n");
+    printf("--------------------------------------------------\n");
+    afficherTableauSolution(p);
+    printf(" -> Cout Initial : %.2f\n", cout_init);
+    printf(" -> Cout Final   : %.2f\n", cout_final);
+    printf(" -> Amelioration : %.2f\n", cout_init - cout_final);
+
+    libererProbleme(p);
+    printf("\n--> Fin du Test Etape 3.\n\n");
+}
+
+// ==========================================================
+// MAIN (Selecteur)
+// ==========================================================
 int main(int argc, char* argv[]) {
 
     if (argc < 2) {
@@ -140,16 +125,34 @@ int main(int argc, char* argv[]) {
 
     const char* nomFichier = argv[1];
 
-    // --- CHOISIS QUEL TEST LANCER ---
+    // ------------------------------------------------------
+    // ZONE DE SELECTION DU TEST
+    // Decommentez la ligne correspondant au test voulu
+    // ------------------------------------------------------
 
-    // Decommente pour tester l'Etape 1 (Lecture/Affichage)
-    // testerEtape1(nomFichier);
+    // testerEtape1(nomFichier);  // Lecture seule
+     testerEtape2(nomFichier);  // Comparaison NO vs BH
+    // testerEtape3(nomFichier);  // Optimisation complète (Le "Vrai" programme)
 
-    // Decommente pour tester l'Etape 2 (N-O vs B-H)
-    // testerEtape2(nomFichier);
+    // ------------------------------------------------------
+    // BONUS : MENU INTERACTIF (Si tu preferes ne pas recompiler)
+    /*
+    int choix = 0;
+    printf("Quel test voulez-vous lancer ?\n");
+    printf("1. Lecture (Etape 1)\n");
+    printf("2. Comparaison Initiale (Etape 2)\n");
+    printf("3. Optimisation Marche-Pied (Etape 3)\n");
+    printf("Votre choix : ");
+    scanf("%d", &choix);
 
-    // Laisse cette ligne active pour tester l'Etape 3 (Optimisation)
-    testerEtape3(nomFichier);
+    switch(choix) {
+        case 1: testerEtape1(nomFichier); break;
+        case 2: testerEtape2(nomFichier); break;
+        case 3: testerEtape3(nomFichier); break;
+        default: printf("Choix invalide.\n");
+    }
+    */
+    // ------------------------------------------------------
 
     return EXIT_SUCCESS;
 }
