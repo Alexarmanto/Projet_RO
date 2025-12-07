@@ -228,6 +228,32 @@ void algoNordOuest(ProblemeTransport* p) {
     free(P); free(C);
 }
 
+// Version silencieuse pour les pipelines (options 3 et 4)
+void algoNordOuestSilencieux(ProblemeTransport* p) {
+    reinitialiserSolution(p);
+    int* P = (int*)malloc(p->n * sizeof(int));
+    int* C = (int*)malloc(p->m * sizeof(int));
+    memcpy(P, p->P, p->n * sizeof(int));
+    memcpy(C, p->C, p->m * sizeof(int));
+
+    int i = 0, j = 0;
+
+    while (i < p->n && j < p->m) {
+        int q = (P[i] < C[j]) ? P[i] : C[j];
+        p->B[i][j] = q;
+        P[i] -= q; C[j] -= q;
+
+        if (P[i] == 0 && C[j] == 0) {
+            if (i < p->n - 1) i++;
+            else j++;
+        }
+        else if (P[i] == 0) i++;
+        else j++;
+    }
+
+    free(P); free(C);
+}
+
 void algoBalasHammer(ProblemeTransport* p) {
     reinitialiserSolution(p);
     int* P = (int*)malloc(p->n * sizeof(int));
@@ -355,6 +381,85 @@ void algoBalasHammer(ProblemeTransport* p) {
     }
 
     printf("\n=== FIN BALAS-HAMMER ===\n");
+    free(P); free(C); free(row_sat); free(col_sat);
+}
+
+// Version silencieuse pour les pipelines (options 3 et 4)
+void algoBalasHammerSilencieux(ProblemeTransport* p) {
+    reinitialiserSolution(p);
+    int* P = (int*)malloc(p->n * sizeof(int));
+    int* C = (int*)malloc(p->m * sizeof(int));
+    memcpy(P, p->P, p->n * sizeof(int));
+    memcpy(C, p->C, p->m * sizeof(int));
+
+    int* row_sat = (int*)calloc(p->n, sizeof(int));
+    int* col_sat = (int*)calloc(p->m, sizeof(int));
+    int n_rows = p->n, n_cols = p->m;
+
+    while (n_rows > 0 && n_cols > 0) {
+        double max_pen = -1.0;
+        int idx_best = -1;
+        bool is_row = true;
+
+        for (int i = 0; i < p->n; i++) {
+            if (row_sat[i]) continue;
+            double m1 = DBL_MAX, m2 = DBL_MAX;
+            for (int j = 0; j < p->m; j++) {
+                if (!col_sat[j]) {
+                    if (p->A[i][j] < m1) { m2 = m1; m1 = p->A[i][j]; }
+                    else if (p->A[i][j] < m2) { m2 = p->A[i][j]; }
+                }
+            }
+            double pen = (m2 == DBL_MAX) ? m1 : (m2 - m1);
+            if (pen > max_pen) { max_pen = pen; idx_best = i; is_row = true; }
+        }
+
+        for (int j = 0; j < p->m; j++) {
+            if (col_sat[j]) continue;
+            double m1 = DBL_MAX, m2 = DBL_MAX;
+            for (int i = 0; i < p->n; i++) {
+                if (!row_sat[i]) {
+                    if (p->A[i][j] < m1) { m2 = m1; m1 = p->A[i][j]; }
+                    else if (p->A[i][j] < m2) { m2 = p->A[i][j]; }
+                }
+            }
+            double pen = (m2 == DBL_MAX) ? m1 : (m2 - m1);
+            if (pen > max_pen) { max_pen = pen; idx_best = j; is_row = false; }
+        }
+
+        int r = -1, c = -1;
+        double min_cost = DBL_MAX;
+
+        if (is_row) {
+            r = idx_best;
+            for (int j = 0; j < p->m; j++) {
+                if (!col_sat[j] && p->A[r][j] < min_cost) { min_cost = p->A[r][j]; c = j; }
+            }
+        } else {
+            c = idx_best;
+            for (int i = 0; i < p->n; i++) {
+                if (!row_sat[i] && p->A[i][c] < min_cost) { min_cost = p->A[i][c]; r = i; }
+            }
+        }
+
+        if (r == -1 || c == -1) break;
+
+        int q = (P[r] < C[c]) ? P[r] : C[c];
+        p->B[r][c] = q;
+        P[r] -= q; C[c] -= q;
+
+        if (P[r] == 0 && C[c] == 0) {
+            if (n_rows > 1 || n_cols > 1) {
+                row_sat[r] = 1; n_rows--;
+            } else {
+                row_sat[r] = 1; col_sat[c] = 1;
+                n_rows--; n_cols--;
+            }
+        }
+        else if (P[r] == 0) { row_sat[r] = 1; n_rows--; }
+        else if (C[c] == 0) { col_sat[c] = 1; n_cols--; }
+    }
+
     free(P); free(C); free(row_sat); free(col_sat);
 }
 
@@ -597,7 +702,7 @@ void trouverEtResoudreCycle(ProblemeTransport* p, int** base, int i_ajout, int j
                     theta = val;
                     i_out = r; j_out = c;
                     printf(" <- LIMITANT");
-                } else if (val == theta && i_out != -1) {
+                } else if (fabs(val - theta) < EPSILON && i_out != -1) {
                     int current_id = r * m + c;
                     int best_id = i_out * m + j_out;
                     if (current_id < best_id) {
@@ -613,7 +718,35 @@ void trouverEtResoudreCycle(ProblemeTransport* p, int** base, int i_ajout, int j
 
         printf("\n>>> Theta (transfert) = %.0f\n", theta);
 
-        // MISE A JOUR
+        // === AMÉLIORATION 2 : GESTION θ = 0 ===
+        if (fabs(theta) < EPSILON) {
+            printf("\n[ALERTE] Theta = 0 (Degenerescence cyclique)\n");
+            printf(">>> Conservation de l'arete ameliorante (%d, %d)\n", i_ajout, j_ajout);
+            printf(">>> Suppression des aretes artificielles (flux nul)...\n");
+
+            // Marquer l'arête améliorante
+            base[i_ajout][j_ajout] = 1;
+
+            // Supprimer TOUTES les arêtes artificielles (B[i][j] == 0)
+            int nb_supprimees = 0;
+            for(int i=0; i<n; i++) {
+                for(int j=0; j<m; j++) {
+                    if (base[i][j] && p->B[i][j] == 0 && !(i == i_ajout && j == j_ajout)) {
+                        base[i][j] = 0;
+                        nb_supprimees++;
+                        printf("  - Arete artificielle supprimee : (%d, %d)\n", i, j);
+                    }
+                }
+            }
+
+            printf(">>> %d arete(s) artificielle(s) supprimee(s).\n", nb_supprimees);
+            printf(">>> Le prochain test de connexite proposera de nouvelles aretes.\n");
+
+            free(parent); free(visite); libererQueue(q);
+            return;
+        }
+
+        // MISE A JOUR NORMALE (θ > 0)
         p->B[i_ajout][j_ajout] += (int)theta;
         base[i_ajout][j_ajout] = 1;
 
@@ -684,6 +817,226 @@ void algoMarchePied(ProblemeTransport* p) {
     }
 
     printf("\n=== FIN MARCHE-PIED ===\n\n");
+
+    for(int i=0; i<n; i++) { free(base[i]); free(couts_marginaux[i]); }
+    free(base); free(couts_marginaux); free(E_s); free(E_t);
+}
+
+
+
+/**
+ * @brief Version du Marche-Pied pour l'étude de complexité.
+ * Cette fonction est nécessaire pour que etude_complexite.c puisse compiler.
+ */
+// =========================================================================
+// VERSIONS SILENCIEUSES POUR L'ÉTUDE DE COMPLEXITE (SANS PRINTF)
+// =========================================================================
+
+// 1. Connexité Silencieuse
+bool testerConnexiteSilencieux(ProblemeTransport* p, int** base) {
+    int n = p->n, m = p->m;
+    int total = n + m;
+    bool* visite = (bool*)calloc(total, sizeof(bool));
+    Queue* q = creerQueue(total);
+
+    enqueue(q, 0, -1);
+    visite[0] = true;
+    int nb_visites = 1;
+
+    while(!isQueueEmpty(q)) {
+        int u = dequeue(q).index;
+        if (u < n) {
+            for (int j = 0; j < m; j++) {
+                if (base[u][j] && !visite[n + j]) {
+                    visite[n + j] = true;
+                    nb_visites++;
+                    enqueue(q, n + j, u);
+                }
+            }
+        } else {
+            for (int i = 0; i < n; i++) {
+                if (base[i][u - n] && !visite[i]) {
+                    visite[i] = true;
+                    nb_visites++;
+                    enqueue(q, i, u);
+                }
+            }
+        }
+    }
+    free(visite);
+    libererQueue(q);
+    return (nb_visites == total);
+}
+
+// 2. Dégénérescence Silencieuse
+bool testerEtResoudreDegenerescenceSilencieux(ProblemeTransport* p, int** base) {
+    int n = p->n, m = p->m;
+    int nb_aretes = 0;
+    for(int i=0; i<n; i++)
+        for(int j=0; j<m; j++)
+            if(base[i][j]) nb_aretes++;
+
+    int requis = n + m - 1;
+
+    if (nb_aretes >= requis) {
+        // Juste vérifier la connexité sans rien afficher
+        if (testerConnexiteSilencieux(p, base)) return false;
+    }
+
+    // Réparation silencieuse
+    testerConnexiteSilencieux(p, base);
+    for(int i=0; i<n && nb_aretes < requis; i++) {
+        for(int j=0; j<m && nb_aretes < requis; j++) {
+            if (!base[i][j]) {
+                if (!cheminExiste(n, m, base, i, n + j)) {
+                    base[i][j] = 1;
+                    nb_aretes++;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+// 3. Cycle Silencieux (avec gestion du Theta=0)
+// Retourne TRUE si une modification a été faite, FALSE si Theta=0 (stalling)
+bool trouverEtResoudreCycleSilencieux(ProblemeTransport* p, int** base, int i_ajout, int j_ajout) {
+    int n = p->n, m = p->m;
+    Queue* q = creerQueue(n + m);
+    int* parent = (int*)malloc((n + m) * sizeof(int));
+    bool* visite = (bool*)calloc(n + m, sizeof(bool));
+
+    int start = n + j_ajout;
+    int target = i_ajout;
+
+    enqueue(q, start, -1);
+    visite[start] = true;
+    bool found = false;
+
+    while(!isQueueEmpty(q)) {
+        int u = dequeue(q).index;
+        if (u == target) { found = true; break; }
+        if (u < n) {
+            for (int j = 0; j < m; j++) if (base[u][j] && !visite[n + j]) {
+                visite[n + j] = true; parent[n + j] = u; enqueue(q, n + j, u);
+            }
+        } else {
+            for (int i = 0; i < n; i++) if (base[i][u - n] && !visite[i]) {
+                visite[i] = true; parent[i] = u; enqueue(q, i, u);
+            }
+        }
+    }
+
+    if (found) {
+        double theta = DBL_MAX;
+        int i_out = -1, j_out = -1;
+        int curr = target;
+        bool is_neg = true;
+
+        // Calcul Theta
+        while(curr != start) {
+            int par = parent[curr];
+            int r, c;
+            if (curr < n) { r = curr; c = par - n; } else { r = par; c = curr - n; }
+
+            if (is_neg) {
+                int val = p->B[r][c];
+                if (val < theta) {
+                    theta = val;
+                    i_out = r; j_out = c;
+                } else if (val == theta && i_out != -1) {
+                    // Bland
+                    if (r * m + c < i_out * m + j_out) { i_out = r; j_out = c; }
+                }
+            }
+            is_neg = !is_neg;
+            curr = par;
+        }
+
+        // Cas Theta = 0
+        if (theta < EPSILON) {
+            base[i_ajout][j_ajout] = 1;
+            // Suppression des arêtes artificielles sauf celle qu'on vient d'ajouter
+            for(int i=0; i<n; i++) {
+                for(int j=0; j<m; j++) {
+                    if (base[i][j] && p->B[i][j] == 0 && !(i == i_ajout && j == j_ajout)) {
+                        base[i][j] = 0;
+                    }
+                }
+            }
+            free(parent); free(visite); libererQueue(q);
+            return false; // Indique un pas dégénéré
+        }
+
+        // Mise à jour normale
+        p->B[i_ajout][j_ajout] += (int)theta;
+        base[i_ajout][j_ajout] = 1;
+
+        curr = target;
+        is_neg = true;
+        while(curr != start) {
+            int par = parent[curr];
+            int r, c;
+            if (curr < n) { r = curr; c = par - n; } else { r = par; c = curr - n; }
+            if (is_neg) p->B[r][c] -= (int)theta;
+            else p->B[r][c] += (int)theta;
+            is_neg = !is_neg;
+            curr = par;
+        }
+
+        if (i_out != -1) base[i_out][j_out] = 0;
+    }
+
+    free(parent); free(visite); libererQueue(q);
+    return true; // Progression réelle
+}
+
+// 4. L'algorithme Principal SILENCIEUX
+void algoMarchePiedSilencieux(ProblemeTransport* p) {
+    int n = p->n, m = p->m;
+    int** base = (int**)malloc(n * sizeof(int*));
+    double** couts_marginaux = (double**)malloc(n * sizeof(double*));
+    for(int i=0; i<n; i++) {
+        base[i] = (int*)calloc(m, sizeof(int));
+        couts_marginaux[i] = (double*)calloc(m, sizeof(double));
+    }
+    double* E_s = (double*)malloc(n * sizeof(double));
+    double* E_t = (double*)malloc(m * sizeof(double));
+
+    for(int i=0; i<n; i++)
+        for(int j=0; j<m; j++)
+            if (p->B[i][j] > 0) base[i][j] = 1;
+
+    int iter = 0;
+    int stalling = 0;
+    bool optimal = false;
+
+    // Limite de sécurité (5000 itérations)
+    while (!optimal && iter < 5000) {
+        iter++;
+
+        testerEtResoudreDegenerescenceSilencieux(p, base);
+        calculerPotentiels(p, base, E_s, E_t); // Celui-ci n'affiche rien de base, c'est bon
+
+        int i_in, j_in;
+        // Celui-ci n'affiche rien si on ne lui demande pas d'afficher la table
+        bool possible = calculerCoutsMarginaux(p, base, E_s, E_t, &i_in, &j_in, couts_marginaux);
+
+        if (!possible) {
+            optimal = true;
+        } else {
+            // Appel de la version silencieuse qui retourne false si on piétine (Theta=0)
+            bool progression = trouverEtResoudreCycleSilencieux(p, base, i_in, j_in);
+
+            if (!progression) stalling++;
+            else stalling = 0;
+
+            // Sécurité anti-boucle infinie sur les 0
+            if (stalling > 50) {
+                optimal = true; // On force l'arrêt
+            }
+        }
+    }
 
     for(int i=0; i<n; i++) { free(base[i]); free(couts_marginaux[i]); }
     free(base); free(couts_marginaux); free(E_s); free(E_t);
