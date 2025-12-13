@@ -1,0 +1,319 @@
+/initialisation/
+
+ALGORITHME NordOuest(Offres P, Demandes C)
+    i ← 0
+    j ← 0
+
+    TANT QUE (i < NbFournisseurs ET j < NbClients) FAIRE
+        // On prend le maximum possible entre l'offre restante et la demande restante
+        quantite ← MIN(P[i], C[j])
+
+        // Affectation
+        Solution[i][j] ← quantite
+        P[i] ← P[i] - quantite
+        C[j] ← C[j] - quantite
+
+        // Déplacement
+        SI P[i] == 0 ALORS
+            i ← i + 1  // Ligne épuisée, on descend
+        SINON
+            j ← j + 1  // Colonne satisfaite, on va à droite
+        FIN SI
+    FIN TANT QUE
+FIN ALGORITHME
+
+---------------------------------------------------------------------------------------------------------
+
+/initialisation/
+
+ALGORITHME BalasHammer(Couts A, Offres P, Demandes C)
+    TANT QUE (Reste des Offres ou Demandes à satisfaire) FAIRE
+        
+        // 1. Calcul des pénalités
+        POUR CHAQUE Ligne i non saturée FAIRE
+            m1 ← coût le plus bas de la ligne
+            m2 ← 2ème coût le plus bas
+            PenaliteLigne[i] ← m2 - m1
+        FIN POUR
+
+        POUR CHAQUE Colonne j non saturée FAIRE
+            m1 ← coût le plus bas de la colonne
+            m2 ← 2ème coût le plus bas
+            PenaliteCol[j] ← m2 - m1
+        FIN POUR
+
+        // 2. Choix de la meilleure ligne ou colonne
+        MaxPenalite ← Trouver le maximum parmi toutes les PenaliteLigne et PenaliteCol
+        
+        SI (C'est une ligne i qui a la MaxPenalite) ALORS
+            j ← colonne ayant le coût MINIMUM sur cette ligne i
+        SINON (C'est une colonne j)
+            i ← ligne ayant le coût MINIMUM sur cette colonne j
+        FIN SI
+
+        // 3. Affectation
+        quantite ← MIN(P[i], C[j])
+        Solution[i][j] ← quantite
+        P[i] ← P[i] - quantite
+        C[j] ← C[j] - quantite
+
+        // 4. Saturation
+        SI P[i] == 0 ALORS Marquer Ligne i comme saturée
+        SI C[j] == 0 ALORS Marquer Colonne j comme saturée
+    FIN TANT QUE
+FIN ALGORITHME
+
+---------------------------------------------------------------------------------------------------------
+
+ALGORITHME MarchePied(Probleme p)
+    SolutionOptimale ← FAUX
+    
+    TANT QUE (NON SolutionOptimale) FAIRE
+        
+        // Étape A : Gérer la dégénérescence (Nbr cases base = n + m - 1)
+        SI (NombreVariablesBase < n + m - 1) OU (Graphe non connexe) ALORS
+            Ajouter des arêtes artificielles (0 flux) pour rendre le graphe connexe
+        FIN SI
+
+        // Étape B : Calculer les potentiels (Es, Et)
+        CalculerPotentiels(Base, Es, Et)
+
+        // Étape C : Calculer les coûts marginaux et trouver le meilleur candidat
+        (candidat_i, candidat_j, gain) ← CalculerCoutsMarginaux(Es, Et)
+
+        SI (gain >= 0) ALORS
+            SolutionOptimale ← VRAI
+            ARRÊTER
+        SINON
+            // Étape D : Amélioration
+            TrouverEtResoudreCycle(candidat_i, candidat_j)
+        FIN SI
+
+    FIN TANT QUE
+FIN ALGORITHME
+
+---------------------------------------------------------------------------------------------------------
+
+/Marche-Pied: sous-fonction 1/
+
+FONCTION CalculerPotentiels(Base)
+    Initialiser tous les Es et Et à INDEFINI
+    Es[0] ← 0  // Point de départ arbitraire
+    File Q ← {0}
+
+    TANT QUE (Q non vide) FAIRE
+        u ← Defiler(Q)
+        
+        SI u est une Ligne ALORS
+            POUR CHAQUE colonne j DANS la Base sur la ligne u FAIRE
+                // Relation : Cout[u][j] = Es[u] - Et[j]
+                // Donc : Et[j] = Es[u] - Cout[u][j]
+                SI Et[j] est INDEFINI ALORS
+                    Et[j] ← Es[u] - Cout[u][j]
+                    Enfiler(j)
+                FIN SI
+            FIN POUR
+        SINON (u est une Colonne)
+            POUR CHAQUE ligne i DANS la Base sur la colonne u FAIRE
+                // Es[i] = Cout[i][u] + Et[u]
+                SI Es[i] est INDEFINI ALORS
+                    Es[i] ← Cout[i][u] + Et[u]
+                    Enfiler(i)
+                FIN SI
+            FIN POUR
+        FIN SI
+    FIN TANT QUE
+FIN FONCTION
+
+---------------------------------------------------------------------------------------------------------
+
+FONCTION CalculerCoutsMarginaux(Ui, Vj)
+    MeilleurGain ← 0
+    Candidat_I ← -1, Candidat_J ← -1
+    
+    POUR chaque case (i, j) HORS BASE FAIRE
+        // Calcul du coût marginal (gain potentiel)
+        // Delta = CoûtRéel - CoûtSimulé
+        Delta ← A[i][j] - (Ui[i] - Vj[j])
+        
+        SI Delta < MeilleurGain ALORS
+            MeilleurGain ← Delta
+            Candidat_I ← i
+            Candidat_J ← j
+        FIN SI
+    FIN POUR
+    
+    RETOURNER (Candidat_I, Candidat_J, MeilleurGain)
+FIN FONCTION
+
+---------------------------------------------------------------------------------------------------------
+
+/Marche-Pied: sous-fonction 2/
+
+FONCTION TrouverEtResoudreCycle(entree_i, entree_j)
+    // 1. Trouver le chemin (BFS)
+    Cycle ← TrouverCheminDansBase(Depart: entree_j, Arrivee: entree_i)
+    Ajouter l'arête (entree_i, entree_j) pour fermer le cycle
+
+    // 2. Calculer Theta (quantité max à transférer)
+    Theta ← INFINI
+    Signe ← NEGATIF
+    
+    POUR CHAQUE arête (u, v) du Cycle (en partant de l'entrante) FAIRE
+        SI Signe est NEGATIF ALORS
+            SI Solution[u][v] < Theta ALORS
+                Theta ← Solution[u][v]
+                Sortante ← (u, v)
+            FIN SI
+        FIN SI
+        Inverser Signe
+    FIN POUR
+
+    // 3. Mettre à jour les flux
+    Solution[entree_i][entree_j] ← Solution[entree_i][entree_j] + Theta
+    Signe ← NEGATIF
+    POUR CHAQUE arête (u, v) du reste du cycle FAIRE
+        SI Signe est NEGATIF ALORS
+            Solution[u][v] ← Solution[u][v] - Theta
+        SINON
+            Solution[u][v] ← Solution[u][v] + Theta
+        FIN SI
+        Inverser Signe
+    FIN POUR
+
+    // 4. Mettre à jour la base
+    Ajouter (entree_i, entree_j) à la Base
+    Retirer Sortante de la Base
+FIN FONCTION
+
+
+---------------------------------------------------------------------------------------------------------
+
+/First In, First Out: Parcours en largeur/
+
+FONCTION Enqueue(File Q, Element x, Parent p)
+    Ajouter x à la fin du tableau de Q
+    Enregistrer p comme le parent de x (pour reconstruire le chemin plus tard)
+    Augmenter la taille de Q
+FIN FONCTION
+
+FONCTION Dequeue(File Q)
+    Récupérer l'élément au début de Q
+    Avancer le pointeur de début
+    RETOURNER l'élément
+FIN FONCTION
+
+---------------------------------------------------------------------------------------------------------
+
+/Test de connexité: Parcours en largeur/
+
+FONCTION TesterConnexite(Base)
+    Créer une File Q vide
+    Tableau Visités[n + m] initialisé à FAUX
+    
+    // On commence arbitrairement par le fournisseur 0
+    Enqueue(Q, 0)
+    Visités[0] ← VRAI
+    CompteurNoeuds ← 1
+
+    TANT QUE (Q n'est pas vide) FAIRE
+        u ← Dequeue(Q)
+
+        // On regarde tous les voisins (lignes ou colonnes) connectés via la Base
+        POUR CHAQUE voisin v relié à u par une case de Base active FAIRE
+            SI (Visités[v] == FAUX) ALORS
+                Visités[v] ← VRAI
+                CompteurNoeuds ← CompteurNoeuds + 1
+                Enqueue(Q, v)
+            FIN SI
+        FIN POUR
+    FIN TANT QUE
+
+    // Si on a visité tout le monde (n lignes + m colonnes), c'est connexe
+    RETOURNER (CompteurNoeuds == n + m)
+FIN FONCTION
+
+---------------------------------------------------------------------------------------------------------
+
+/Gestion avancée de la Dégénérescence/C'est la logique qui "répare" la solution si elle a moins de n + m - 1 variables de base./
+
+FONCTION ResoudreDegenerescence(Base)
+    NombreAretes ← Compter les cases actives dans la Base
+    Requis ← n + m - 1
+
+    SI (NombreAretes >= Requis) ET (TesterConnexite(Base) est VRAI) ALORS
+        RETOURNER (Pas besoin de réparation)
+    FIN SI
+
+    // Réparation : Ajout d'arêtes artificielles
+    TANT QUE (NombreAretes < Requis) FAIRE
+        
+        // On cherche une case vide (i, j) qui ne crée pas de cycle
+        // (C'est-à-dire qui connecte deux composantes séparées)
+        POUR i de 0 à n, POUR j de 0 à m FAIRE
+            SI Base[i][j] est VIDE ALORS
+                SI (Il n'y a PAS de chemin déjà existant entre i et j) ALORS
+                    Base[i][j] ← 1 (Artificielle, Flux = 0)
+                    NombreAretes ← NombreAretes + 1
+                    SI NombreAretes == Requis ALORS ARRÊTER
+                FIN SI
+            FIN SI
+        FIN POUR
+        
+    FIN TANT QUE
+FIN FONCTION
+
+---------------------------------------------------------------------------------------------------------
+/Module d'étude de compléxité.sous_fonction1/
+
+FONCTION GenererProblemeAleatoire(Taille n)
+    Créer un problème de taille n x n
+    
+    // 1. Coûts aléatoires
+    Remplir la matrice A avec des nombres aléatoires entre 1 et 100
+
+    // 2. Garantir l'équilibre (Offre totale = Demande totale)
+    // Astuce : On génère une solution de transport temporaire aléatoire
+    TableauTemp[n][n] ← valeurs aléatoires
+    
+    // On calcule les sommes pour déduire P et C
+    POUR i de 0 à n : P[i] ← Somme de la ligne i de TableauTemp
+    POUR j de 0 à n : C[j] ← Somme de la colonne j de TableauTemp
+    
+    // Ainsi, Somme(P) est mathématiquement égale à Somme(C)
+    RETOURNER Probleme
+FIN FONCTION
+
+---------------------------------------------------------------------------------------------------------
+
+/Module d'étude de compléxité.sous_fonction2/
+
+FONCTION ExecuterTests(Taille n)
+    POUR essai de 1 à 20 FAIRE
+        p ← GenererProblemeAleatoire(n)
+
+        // Mesure Nord-Ouest
+        DebutChrono()
+        AlgoNordOuest(p)
+        TempsNO ← FinChrono()
+
+        // Mesure Optimisation post-NO
+        DebutChrono()
+        AlgoMarchePied(p)
+        TempsOptiNO ← FinChrono()
+
+        Reinitialiser(p)
+
+        // Mesure Balas-Hammer
+        DebutChrono()
+        AlgoBalasHammer(p)
+        TempsBH ← FinChrono()
+        
+        // ... (idem pour optim post-BH)
+        
+        Enregistrer les résultats dans un tableau
+        Liberer(p)
+    FIN POUR
+    
+    Calculer et Afficher les Moyennes
+FIN FONCTION
